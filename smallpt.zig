@@ -5,6 +5,11 @@ const io = @import("std").io;
 const rand = @import("std").rand;
 const warn = @import("std").debug.warn;
 const c_allocator = @import("std").heap.c_allocator;
+const c_stdio = @cImport({
+    // See https://github.com/zig-lang/zig/issues/515
+    @cDefine("_NO_CRT_STDIO_INLINE", "1");
+    @cInclude("stdio.h");
+});
 
 //float_type ft
 const ft = f64;
@@ -164,12 +169,12 @@ pub fn intersect(comptime T: type, r: &const Ray(T), t: &T, id: &usize) bool {
     return *t < inf;
 }
 
-pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.Random) &const Vec(T) { 
+pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.Random) Vec(T) { 
     var t: T = 0.0;
     var id: usize = 0;
 
     if (!intersect(T, r, &t, &id)) {
-        return &Vec(T).init(0.0, 0.0, 0.0);
+        return Vec(T).init(0.0, 0.0, 0.0);
     }
 
 
@@ -184,7 +189,7 @@ pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.
         if ((random.float(T) < p) and depth < 10) {
             f = f.scale(1.0 / p);
         } else {
-            return obj.e;
+            return Vec(T).init(obj.e.x, obj.e.y, obj.e.z);
         }
     }
 
@@ -196,9 +201,9 @@ pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.
         const u = (if (math.fabs(w.x) > 0.1) Vec(T).init(0.0, 1.0, 0.0) else Vec(T).init(1.0, 0.0, 0.0)).cross(w).norm();
         const v = w.cross(u);
         const d = u.scale(math.cos(r1) * r2s).add(v.scale(math.sin(r1) * r2s)).add(w.scale(math.sqrt(1.0 - r2))).norm();
-        return &obj.e.add(f.mul(radiance(T, Ray(T).init(&x, d), depth + 1, random)));
+        return obj.e.add(f.mul(radiance(T, Ray(T).init(&x, d), depth + 1, random)));
     } else if (obj.refl == Refl_t.SPEC) {
-        return &obj.e.add(f.mul(radiance(T, Ray(T).init(&x, r.d.sub(n.scale(2.0 * n.dot(r.d)))), depth + 1, random)));
+        return obj.e.add(f.mul(radiance(T, Ray(T).init(&x, r.d.sub(n.scale(2.0 * n.dot(r.d)))), depth + 1, random)));
     }
 
     const reflRay = Ray(T).init(&x, (r.d.sub(n.scale(2.0 * n.dot(r.d)))));
@@ -210,7 +215,7 @@ pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.
     const cos2t = 1.0 - nnt * nnt * (1 - ddn * ddn);
 
     if (cos2t < 0.0) {
-        return &obj.e.add(f.mul(radiance(T, reflRay, depth + 1, random)));
+        return obj.e.add(f.mul(radiance(T, reflRay, depth + 1, random)));
     }
 
     const factor = if (into) T(1.0) else T(-1.0);
@@ -229,7 +234,7 @@ pub fn radiance(comptime T: type, r: &const Ray(T), depth: usize, random: &rand.
     const multi2 = radiance(T, reflRay, depth + 1, random).scale(Re).add(radiance(T, Ray(T).init(x, tdir), depth + 1, random).scale(Tr));
     const multi = if (depth > 2) multi1 else multi2;
 
-    return &obj.e.add(f.mul(multi));
+    return obj.e.add(f.mul(multi));
 }
 
 pub fn main() !void {
@@ -238,7 +243,7 @@ pub fn main() !void {
 
     const w: usize = 1024;
     const h: usize = 768;
-    const samps = 1;
+    const samps = 10;
 
     const cam = Ray(ft).init(Vec(ft).init(50,52,295.6), Vec(ft).init(0,-0.042612,-1).norm());
     const cx = Vec(ft).init(ft(w) * 0.5135 / ft(h), 0.0, 0.0);
@@ -250,7 +255,6 @@ pub fn main() !void {
     }
     var y: usize = 0;
     var r = Vec(ft).init(0.0, 0.0, 0.0);
-
 
     while (y < h) : (y += 1) {
         var x: usize = 0;
@@ -281,9 +285,10 @@ pub fn main() !void {
     }
 
     var file = try File.openWrite(c_allocator, "image.ppm");
-    var adapter = io.FileOutStream.init(&file);
-    var stream = &adapter.stream;
     defer file.close();
+    var adapter = io.FileOutStream.init(&file);
+    var buf_stream = io.BufferedOutStream(io.FileOutStream.Error).init(&adapter.stream);
+    const stream = &buf_stream.stream;
 
     var i: usize = 0;
     const bits: usize = 255;
@@ -291,4 +296,6 @@ pub fn main() !void {
     while (i < (w * h)) : (i += 1) {
         try stream.print("{} {} {} ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
     }
+
+    try buf_stream.flush();
 }
