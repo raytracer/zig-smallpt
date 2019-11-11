@@ -273,8 +273,8 @@ pub fn main() !void {
                         var d = cx.scale(exp1).add(cy.scale(exp2)).add(cam.d);
 
                         const vec = cam.o.add(d.scale(140.0));
-                        const rad = radiance(ft, Ray(ft).init(vec, d.norm()), 0, &random);
-                        r = r.add(rad.scale(1.0 / @intToFloat(f64, samps)));
+                        var rad = async radiance(ft, Ray(ft).init(vec, d.norm()), 0, &random);
+                        r = r.add((await rad).scale(1.0 / @intToFloat(f64, samps)));
                     }
                     c[i] = c[i].add(Vec(ft).init(clamp(r.x), clamp(r.y), clamp(r.z))).scale(0.25);
                 }
