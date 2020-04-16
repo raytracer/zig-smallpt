@@ -1,16 +1,10 @@
 const std = @import("std");
 const math = @import("std").math;
-const File = @import("std").fs.File;
-const io = @import("std").io;
 const fs = @import("std").fs;
+const io = @import("std").io;
 const rand = @import("std").rand;
 const warn = @import("std").debug.warn;
 const c_allocator = @import("std").heap.c_allocator;
-const c_stdio = @cImport({
-    // See https://github.com/zig-lang/zig/issues/515
-    @cDefine("_NO_CRT_STDIO_INLINE", "1");
-    @cInclude("stdio.h");
-});
 
 //float_type ft
 const ft = f64;
@@ -137,7 +131,7 @@ const spheres = [_]Sphere(ft){
     Sphere(ft).init(600.0, Vec(ft).init(50.0, 681.6 - 0.27, 81.6), Vec(ft).init(12.0, 12.0, 12.0), Vec(ft).init(0, 0, 0), Refl_t.DIFF), //Lite
 };
 
-pub fn clamp(x: var) @typeOf(x) {
+pub fn clamp(x: var) @TypeOf(x) {
     if (x < 0.0) {
         return 0.0;
     } else if (x > 1.0) {
@@ -148,7 +142,7 @@ pub fn clamp(x: var) @typeOf(x) {
 }
 
 pub fn toInt(x: var) i32 {
-    return @floatToInt(i32, math.pow(@typeOf(x), clamp(x), 1.0 / 2.2) * 255.0 + 0.5);
+    return @floatToInt(i32, math.pow(@TypeOf(x), clamp(x), 1.0 / 2.2) * 255.0 + 0.5);
 }
 
 pub fn intersect(comptime T: type, r: Ray(T), t: *T, id: *usize) bool {
@@ -236,9 +230,9 @@ pub fn main() !void {
     var prng = rand.DefaultPrng.init(0);
     var random = prng.random;
 
-    const w: usize = 640;
-    const h: usize = 480;
-    const samps = 20;
+    const w: usize = 100;
+    const h: usize = 100;
+    const samps = 5;
 
     const cam = Ray(ft).init(Vec(ft).init(50, 52, 295.6), Vec(ft).init(0, -0.042612, -1).norm());
     const cx = Vec(ft).init(@intToFloat(f64, w) * 0.5135 / @intToFloat(f64, h), 0.0, 0.0);
@@ -282,18 +276,25 @@ pub fn main() !void {
         }
     }
 
-    var file = try File.openWrite("image.ppm");
+    var file = try fs.cwd().createFile("image.ppm", .{.truncate = true,});
     defer file.close();
     var adapter = file.outStream();
-    var buf_stream = io.BufferedOutStream(fs.File.WriteError).init(&adapter.stream);
-    const stream = &buf_stream.stream;
+    var bufferedOutStream =io.bufferedOutStream(adapter);
+    var stream = bufferedOutStream.outStream();
 
     var i: usize = 0;
     const bits: usize = 255;
-    try stream.print("P3\n{} {}\n{}\n", w, h, bits);
+    try stream.print("P3\n{} {}\n{}\n", .{w, h, bits});
+    var col: usize = 0;
     while (i < (w * h)) : (i += 1) {
-        try stream.print("{} {} {} ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
+        try stream.print("{} {} {} ", .{toInt(c[i].x), toInt(c[i].y), toInt(c[i].z)});
+        col = col + 1;
+
+        if (col == w) {
+            col = 0;
+            try stream.print("\n", .{});
+        }
     }
 
-    try buf_stream.flush();
+    try bufferedOutStream.flush();
 }
